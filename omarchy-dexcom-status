@@ -1,0 +1,215 @@
+#!/usr/bin/env python3
+"""Fetch the latest Dexcom Share glucose reading and print it as JSON.
+
+Reads credentials and thresholds from ~/.config/omarchy/dexcom.json:
+  {
+    "username": "...",
+    "password": "...",
+    "region": "us" | "ous",
+    "highThreshold": 180,
+    "lowThreshold": 70
+  }
+
+Prints one JSON object to stdout, always exit 0 so the caller can just
+parse stdout rather than branch on exit code:
+  {"ok": true, "mgdl": 118, "trend": "Flat", "trendArrow": "→",
+   "level": "normal", "minutesAgo": 3}
+  {"ok": false, "error": "not configured"}
+"""
+
+import json
+import re
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+CONFIG_PATH = Path.home() / ".config" / "omarchy" / "dexcom.json"
+STATE_PATH = Path.home() / ".local" / "state" / "omarchy" / "dexcom-status.json"
+
+# Dexcom Share error codes that mean the credentials themselves are wrong,
+# as opposed to a transient network/server problem. Repeatedly retrying
+# these looks like a brute-force attempt from Dexcom's side, so after a few
+# in a row we stop hitting the API until the config file is actually edited.
+AUTH_ERROR_CODES = {
+    "AccountPasswordInvalid",
+    "AccountPasswordInvalidLegacy",
+    "SSO_AuthenticateAccountNotFound",
+    "SSO_AuthenticateMaxAttemptsExceeded",
+    "AccountNotFound",
+    "AccountLockedOut",
+    "InvalidArgument",
+}
+MAX_CONSECUTIVE_AUTH_FAILURES = 3
+
+# Same application id every Dexcom Share client (pydexcom, xDrip, Nightscout
+# bridges) registers with -- Dexcom Share has no public app-registration flow.
+APPLICATION_ID = "d8665ade-9673-4e27-9ff6-92db4ce13d13"
+
+BASE_URLS = {
+    "us": "https://share2.dexcom.com/ShareWebServices/Services",
+    "ous": "https://shareous1.dexcom.com/ShareWebServices/Services",
+}
+
+TREND_ARROWS = {
+    "DoubleUp": "↑↑",
+    "SingleUp": "↑",
+    "FortyFiveUp": "↗",
+    "Flat": "→",
+    "FortyFiveDown": "↘",
+    "SingleDown": "↓",
+    "DoubleDown": "↓↓",
+    "NotComputable": "?",
+    "RateOutOfRange": "?",
+}
+
+TIMEOUT = 8
+
+
+def emit(payload):
+    print(json.dumps(payload))
+    sys.exit(0)
+
+
+def load_config():
+    try:
+        raw = CONFIG_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
+def post_json(url, body):
+    data = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def parse_dexcom_date(value):
+    match = re.search(r"\((\d+)", str(value or ""))
+    if not match:
+        return None
+    return int(match.group(1)) / 1000.0
+
+
+def load_state():
+    try:
+        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"consecutiveAuthFailures": 0, "configMtime": None}
+
+
+def save_state(state):
+    try:
+        STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def dexcom_error_code(http_error):
+    try:
+        body = json.loads(http_error.read().decode("utf-8", errors="replace"))
+        return str(body.get("Code", ""))
+    except (json.JSONDecodeError, OSError, AttributeError):
+        return ""
+
+
+def main():
+    config = load_config()
+    if not config or not config.get("username") or not config.get("password"):
+        emit({"ok": False, "error": "not configured"})
+
+    config_mtime = CONFIG_PATH.stat().st_mtime
+    state = load_state()
+    if state.get("configMtime") != config_mtime:
+        state = {"consecutiveAuthFailures": 0, "configMtime": config_mtime}
+
+    if state.get("consecutiveAuthFailures", 0) >= MAX_CONSECUTIVE_AUTH_FAILURES:
+        emit({
+            "ok": False,
+            "error": "login rejected repeatedly -- fix ~/.config/omarchy/dexcom.json to retry",
+        })
+
+    region = str(config.get("region", "us")).lower()
+    base_url = BASE_URLS.get(region, BASE_URLS["us"])
+    high = config.get("highThreshold", 180)
+    low = config.get("lowThreshold", 70)
+
+    def record_auth_failure(reason):
+        state["consecutiveAuthFailures"] = state.get("consecutiveAuthFailures", 0) + 1
+        state["configMtime"] = config_mtime
+        save_state(state)
+        emit({"ok": False, "error": "login failed: " + reason})
+
+    try:
+        session_id = post_json(
+            base_url + "/General/LoginPublisherAccountByName",
+            {
+                "accountName": config["username"],
+                "password": config["password"],
+                "applicationId": APPLICATION_ID,
+            },
+        )
+    except urllib.error.HTTPError as e:
+        code = dexcom_error_code(e)
+        if code in AUTH_ERROR_CODES:
+            record_auth_failure(code)
+        emit({"ok": False, "error": "login failed (HTTP " + str(e.code) + (": " + code if code else "") + ")"})
+    except (urllib.error.URLError, TimeoutError, OSError):
+        emit({"ok": False, "error": "login failed (network)"})
+    except json.JSONDecodeError:
+        emit({"ok": False, "error": "login failed (bad response)"})
+
+    if not session_id or session_id == "00000000-0000-0000-0000-000000000000":
+        record_auth_failure("empty session")
+
+    if state.get("consecutiveAuthFailures", 0) > 0:
+        save_state({"consecutiveAuthFailures": 0, "configMtime": config_mtime})
+
+    try:
+        readings = post_json(
+            base_url + "/Publisher/ReadPublisherLatestGlucoseValues",
+            {"sessionId": session_id, "minutes": 1440, "maxCount": 1},
+        )
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        emit({"ok": False, "error": "reading fetch failed (network)"})
+    except json.JSONDecodeError:
+        emit({"ok": False, "error": "reading fetch failed (bad response)"})
+
+    if not readings:
+        emit({"ok": False, "error": "no recent readings"})
+
+    latest = readings[0]
+    mgdl = latest.get("Value")
+    trend = latest.get("Trend", "")
+    timestamp = parse_dexcom_date(latest.get("WT"))
+    minutes_ago = int((time.time() - timestamp) / 60) if timestamp else None
+
+    if mgdl is None:
+        emit({"ok": False, "error": "no glucose value in reading"})
+
+    level = "high" if mgdl >= high else "low" if mgdl <= low else "normal"
+
+    emit({
+        "ok": True,
+        "mgdl": mgdl,
+        "trend": trend,
+        "trendArrow": TREND_ARROWS.get(trend, ""),
+        "level": level,
+        "minutesAgo": minutes_ago,
+    })
+
+
+if __name__ == "__main__":
+    main()

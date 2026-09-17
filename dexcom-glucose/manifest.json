@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "dexcom-glucose",
+  "name": "Dexcom",
+  "version": "1.0.0",
+  "author": "omarchy-dexcom-bar contributors",
+  "description": "Current blood glucose from Dexcom Share, color-coded by threshold",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Dexcom",
+    "description": "Current blood glucose from Dexcom Share",
+    "category": "Info",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

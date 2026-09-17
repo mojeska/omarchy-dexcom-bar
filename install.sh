@@ -1,0 +1,53 @@
+#!/bin/bash
+# Installs the Dexcom blood glucose bar widget for Omarchy.
+set -euo pipefail
+
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BIN_DIR="$HOME/.local/bin"
+PLUGIN_ID="dexcom-glucose"
+PLUGIN_DIR="$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+CONFIG_PATH="$HOME/.config/omarchy/dexcom.json"
+
+mkdir -p "$BIN_DIR"
+cp "$REPO_DIR/omarchy-dexcom-status" "$BIN_DIR/"
+chmod +x "$BIN_DIR/omarchy-dexcom-status"
+echo "Installed omarchy-dexcom-status to $BIN_DIR"
+
+case ":$PATH:" in
+*":$BIN_DIR:"*) ;;
+*) echo "Warning: $BIN_DIR is not on your PATH. Add it in your shell profile." ;;
+esac
+
+mkdir -p "$PLUGIN_DIR"
+cp "$REPO_DIR/dexcom-glucose/manifest.json" "$REPO_DIR/dexcom-glucose/BarWidget.qml" "$PLUGIN_DIR/"
+echo "Installed plugin to $PLUGIN_DIR"
+
+if [[ ! -f "$CONFIG_PATH" ]]; then
+  mkdir -p "$(dirname "$CONFIG_PATH")"
+  cat > "$CONFIG_PATH" <<'EOF'
+{
+  "username": "",
+  "password": "",
+  "region": "us",
+  "highThreshold": 180,
+  "lowThreshold": 70
+}
+EOF
+  chmod 600 "$CONFIG_PATH"
+  echo "Created $CONFIG_PATH (permissions 600) -- edit it with your Dexcom Share credentials and thresholds."
+else
+  echo "$CONFIG_PATH already exists, leaving it alone."
+fi
+
+if command -v omarchy >/dev/null 2>&1; then
+  if omarchy plugin validate "$PLUGIN_DIR" >/dev/null 2>&1; then
+    omarchy plugin enable "$PLUGIN_ID" --section right >/dev/null 2>&1 \
+      && echo "Enabled $PLUGIN_ID in the bar (right section)."
+  else
+    echo "Warning: plugin failed validation -- run 'omarchy plugin validate $PLUGIN_DIR' to see why."
+  fi
+else
+  echo "'omarchy' command not found -- enable the plugin manually once it's on an Omarchy system."
+fi
+
+echo "Done. Edit $CONFIG_PATH with your Dexcom Share account, then it'll show up in the bar within a minute."
