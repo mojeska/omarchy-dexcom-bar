@@ -68,6 +68,20 @@ authentication failures and stops calling the API until you actually edit
 "Dexcom" with no value, check the tooltip or run
 `omarchy-dexcom-status` directly in a terminal to see the specific error.
 
+Two failure modes worth knowing about, both confirmed against a real
+account while building this:
+
+- **"login failed" even with a correct password.** Dexcom Share's login can
+  be on an older backend than the main Dexcom/Clarity web login, and the
+  two sometimes drift out of sync. If you're sure the password is right,
+  check Settings → Share in the Dexcom mobile app and re-confirm/re-enter
+  the password there specifically.
+- **"no recent readings" despite a successful login.** This is Dexcom Share
+  deliberately withholding data: the API only returns glucose values while
+  the account has at least one *active, accepted* follower. Add one (or
+  keep a spare Follow account around just for this) in the Dexcom app's
+  Share/Manage Followers settings.
+
 ## Uninstall
 
 ```bash

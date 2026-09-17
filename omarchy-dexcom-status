@@ -134,6 +134,7 @@ def main():
     state = load_state()
     if state.get("configMtime") != config_mtime:
         state = {"consecutiveAuthFailures": 0, "configMtime": config_mtime}
+        save_state(state)
 
     if state.get("consecutiveAuthFailures", 0) >= MAX_CONSECUTIVE_AUTH_FAILURES:
         emit({
@@ -152,11 +153,38 @@ def main():
         save_state(state)
         emit({"ok": False, "error": "login failed: " + reason})
 
+    # Two-step login: AuthenticatePublisherAccount resolves the account name
+    # to an internal account id, then LoginPublisherAccountById exchanges
+    # that id + password for a session id. The older single-step
+    # LoginPublisherAccountByName call is unreliable for some accounts even
+    # with a correct password.
     try:
-        session_id = post_json(
-            base_url + "/General/LoginPublisherAccountByName",
+        account_id = post_json(
+            base_url + "/General/AuthenticatePublisherAccount",
             {
                 "accountName": config["username"],
+                "password": config["password"],
+                "applicationId": APPLICATION_ID,
+            },
+        )
+    except urllib.error.HTTPError as e:
+        code = dexcom_error_code(e)
+        if code in AUTH_ERROR_CODES:
+            record_auth_failure(code)
+        emit({"ok": False, "error": "authenticate failed (HTTP " + str(e.code) + (": " + code if code else "") + ")"})
+    except (urllib.error.URLError, TimeoutError, OSError):
+        emit({"ok": False, "error": "authenticate failed (network)"})
+    except json.JSONDecodeError:
+        emit({"ok": False, "error": "authenticate failed (bad response)"})
+
+    if not account_id or account_id == "00000000-0000-0000-0000-000000000000":
+        record_auth_failure("empty account id")
+
+    try:
+        session_id = post_json(
+            base_url + "/General/LoginPublisherAccountById",
+            {
+                "accountId": account_id,
                 "password": config["password"],
                 "applicationId": APPLICATION_ID,
             },
