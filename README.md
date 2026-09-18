@@ -39,7 +39,14 @@ Then edit `~/.config/omarchy/dexcom.json`:
 ```
 
 - `username` / `password`: your regular Dexcom account login (the one used
-  in the Dexcom mobile app), not a separate API key.
+  in the Dexcom mobile app, for the account that's actually wearing the
+  sensor -- not a follower account), not a separate API key. If you log in
+  with a US phone number, it needs the country code (`+15551234567`, not
+  `5551234567`) -- Dexcom Share rejects a bare 10-digit number with the same
+  generic error as a wrong password, which makes it easy to chase the wrong
+  problem. `omarchy-dexcom-status` auto-adds `+1` to a bare 10-digit
+  `username` when `region` is `"us"`, so you likely don't have to think
+  about this, but it's worth knowing if login still fails.
 - `region`: `"us"` for a US account, `"ous"` for outside-US.
 - `highThreshold` / `lowThreshold`: mg/dL cutoffs for purple/red.
 
@@ -68,14 +75,24 @@ authentication failures and stops calling the API until you actually edit
 "Dexcom" with no value, check the tooltip or run
 `omarchy-dexcom-status` directly in a terminal to see the specific error.
 
-Two failure modes worth knowing about, both confirmed against a real
-account while building this:
+Failure modes worth knowing about, all confirmed against a real account
+while building this:
 
-- **"login failed" even with a correct password.** Dexcom Share's login can
-  be on an older backend than the main Dexcom/Clarity web login, and the
-  two sometimes drift out of sync. If you're sure the password is right,
-  check Settings → Share in the Dexcom mobile app and re-confirm/re-enter
-  the password there specifically.
+- **"login failed" (`AccountPasswordInvalid`) despite a correct password,
+  when `username` is a bare 10-digit US phone number.** Dexcom Share
+  requires the country code (`+15551234567`) and rejects a bare number with
+  the exact same generic error as a wrong password -- there's no way to
+  tell the two apart from the error alone. `omarchy-dexcom-status` now
+  auto-adds `+1` for a 10-digit `username` when `region` is `"us"`, so this
+  should be handled automatically; it's documented here in case you're
+  troubleshooting an older version or a non-US-formatted number.
+- **"login failed" for other reasons.** Dexcom Share's login can be on an
+  older backend than the main Dexcom/Clarity web login, and the two
+  sometimes drift out of sync -- a password that works on dexcom.com isn't
+  guaranteed to work here. If phone formatting isn't the issue, try
+  Settings → Share in the Dexcom mobile app and re-confirm/re-enter the
+  password there, or do a full password reset (not just re-entering what
+  you believe the current one is).
 - **"no recent readings" despite a successful login.** This is Dexcom Share
   deliberately withholding data: the API only returns glucose values while
   the account has at least one *active, accepted* follower. Add one (or

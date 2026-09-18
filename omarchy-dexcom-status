@@ -72,15 +72,29 @@ def emit(payload):
     sys.exit(0)
 
 
+def normalize_username(username, region):
+    # A bare 10-digit US number is rejected by Dexcom Share unless it carries
+    # the country code -- confirmed against a real account that this alone
+    # produces the same generic AccountPasswordInvalid error as an actually
+    # wrong password, with no other symptom to tell them apart.
+    stripped = username.strip()
+    if region == "us" and re.fullmatch(r"\d{10}", stripped):
+        return "+1" + stripped
+    return username
+
+
 def load_config():
     try:
         raw = CONFIG_PATH.read_text(encoding="utf-8")
     except OSError:
         return None
     try:
-        return json.loads(raw)
+        config = json.loads(raw)
     except json.JSONDecodeError:
         return None
+    if isinstance(config, dict) and isinstance(config.get("username"), str):
+        config["username"] = normalize_username(config["username"], str(config.get("region", "us")).lower())
+    return config
 
 
 def post_json(url, body):
