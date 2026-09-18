@@ -108,3 +108,28 @@ while building this:
 Removes the plugin and the helper script. Your `~/.config/omarchy/dexcom.json`
 is left in place since it holds your credentials -- delete it yourself if
 you're done with it.
+
+## macOS (xbar)
+
+`macos-xbar/dexcom-glucose.60s.py` is a self-contained port for
+[xbar](https://xbarapp.com/) (or [SwiftBar](https://swiftbar.app/)) --
+same Dexcom Share logic, same purple/red thresholds, same failure modes
+and fixes described above, just packaged as a single script instead of
+an Omarchy plugin since there's no Quickshell bar on macOS.
+
+Install:
+
+1. Install xbar (or SwiftBar) and note its plugins folder (xbar asks for
+   one on first launch; default is `~/Library/Application Support/xbar/plugins`).
+2. Copy the script there and make it executable:
+   ```bash
+   cp macos-xbar/dexcom-glucose.60s.py "$HOME/Library/Application Support/xbar/plugins/"
+   chmod +x "$HOME/Library/Application Support/xbar/plugins/dexcom-glucose.60s.py"
+   ```
+3. Click it in the menu bar → **Edit config…** to open
+   `~/.config/dexcom-bar/dexcom.json` (created automatically on first run,
+   permissions `600`) and fill in the same fields described above.
+
+The `.60s.` in the filename is how xbar knows to refresh it every 60
+seconds -- rename the file (e.g. `.2m.`) to change that. Click **Refresh**
+in the dropdown to force an immediate check.
