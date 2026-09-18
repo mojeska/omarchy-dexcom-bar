@@ -268,7 +268,7 @@ def render(result):
 
     mgdl = result["mgdl"]
     level = result["level"]
-    color = "purple" if level == "high" else "red" if level == "low" else ""
+    color = "orange" if level == "high" else "red" if level == "low" else ""
     stale = result["minutesAgo"] is not None and result["minutesAgo"] > 20
 
     label = str(round(mgdl)) + result["trendArrow"]
