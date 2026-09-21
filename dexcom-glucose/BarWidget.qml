@@ -20,6 +20,14 @@ BarWidget {
   readonly property int refreshSeconds: Math.max(15, parseInt(setting("refreshSeconds", 60), 10) || 60)
   readonly property bool stale: minutesAgo !== null && minutesAgo > 20
 
+  // Morse SOS (··· --- ···) blinked on the reading while it's low, so a red
+  // number is hard to miss out of the corner of an eye. One dot = sosUnit;
+  // a dash is 3 units, the gap between letters is 3 units, the gap before
+  // the pattern repeats is 7 units -- standard Morse timing.
+  readonly property int sosUnit: 150
+  readonly property bool sosActive: hasReading && level === "low"
+  property bool sosOn: true
+
   readonly property color levelColor: level === "high" ? "purple"
     : level === "low" ? "red"
     : root.bar ? root.bar.barForeground : Color.foreground
@@ -96,23 +104,74 @@ BarWidget {
     onTriggered: root.refresh()
   }
 
-  WidgetButton {
-    id: button
-    anchors.fill: parent
-    bar: root.bar
-    text: root.displayText
-    foreground: root.levelColor
-    useActiveColor: false
-    dimmed: root.stale
-    horizontalMargin: 8.75
-    fontSize: Style.font.body
-    tooltipText: root.tooltip
+  SequentialAnimation {
+    running: root.sosActive
+    loops: Animation.Infinite
 
-    onPressed: function(b) {
-      if (b === Qt.RightButton) {
-        if (root.bar) root.bar.run("omarchy-notification-send \"Dexcom\" \"" + root.tooltip + "\"")
-      } else {
-        root.refresh()
+    // S
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit * 3 }
+    // O
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit * 3 }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit * 3 }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit * 3 }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit * 3 }
+    // S
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: true }
+    PauseAnimation { duration: root.sosUnit }
+    PropertyAction { target: root; property: "sosOn"; value: false }
+    PauseAnimation { duration: root.sosUnit * 7 }
+  }
+
+  Item {
+    id: blinkWrap
+    anchors.fill: parent
+    opacity: root.sosActive ? (root.sosOn ? 1 : 0.15) : 1
+
+    WidgetButton {
+      id: button
+      anchors.fill: parent
+      bar: root.bar
+      text: root.displayText
+      foreground: root.levelColor
+      useActiveColor: false
+      dimmed: root.stale
+      horizontalMargin: 8.75
+      fontSize: Style.font.body
+      tooltipText: root.tooltip
+
+      onPressed: function(b) {
+        if (b === Qt.RightButton) {
+          if (root.bar) root.bar.run("omarchy-notification-send \"Dexcom\" \"" + root.tooltip + "\"")
+        } else {
+          root.refresh()
+        }
       }
     }
   }
