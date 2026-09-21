@@ -57,10 +57,11 @@ holds your password in plaintext, which is why the installer locks it to
 ## Use
 
 The bar shows the value and a trend arrow, e.g. `118→`, `220↑` (orange),
-`62↓` (red). It dims if a reading is more than 20 minutes stale (sensor or
-network issue). Left-click forces an immediate refresh; right-click sends a
-desktop notification with the full detail. The poll interval defaults to 60
-seconds and can be changed with:
+`62↓` (red). A low reading also blinks the number in Morse SOS (··· --- ···)
+so it's hard to miss out of the corner of an eye. It dims if a reading is
+more than 20 minutes stale (sensor or network issue). Left-click forces an
+immediate refresh; right-click sends a desktop notification with the full
+detail. The poll interval defaults to 60 seconds and can be changed with:
 
 ```bash
 omarchy bar set dexcom-glucose refreshSeconds 120
@@ -116,6 +117,12 @@ you're done with it.
 same Dexcom Share logic, same orange/red thresholds, same failure modes
 and fixes described above, just packaged as a single script instead of
 an Omarchy plugin since there's no Quickshell bar on macOS.
+
+It does **not** blink SOS on a low reading like the Omarchy widget does --
+that needs sub-second updates, which on macOS means SwiftBar's "streamable"
+plugin type (a persistent process, not the run-and-exit model xbar plugins
+normally use). Deliberately skipped to keep this script working the same
+way on both xbar and SwiftBar rather than forking behavior between them.
 
 Install:
 
