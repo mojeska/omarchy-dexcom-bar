@@ -96,7 +96,7 @@ BarWidget {
     onTriggered: root.refresh()
   }
 
-  BarIconButton {
+  WidgetButton {
     id: button
     anchors.fill: parent
     bar: root.bar
@@ -104,7 +104,7 @@ BarWidget {
     foreground: root.levelColor
     useActiveColor: false
     dimmed: root.stale
-    slotSize: Style.bar.statusSlot
+    horizontalMargin: 8.75
     fontSize: Style.font.body
     tooltipText: root.tooltip
 
