@@ -28,7 +28,7 @@ BarWidget {
   readonly property bool sosActive: hasReading && level === "low"
   property bool sosOn: true
 
-  readonly property color levelColor: level === "high" ? "purple"
+  readonly property color levelColor: level === "high" ? "orange"
     : level === "low" ? "red"
     : root.bar ? root.bar.barForeground : Color.foreground
 

@@ -2,7 +2,7 @@
 
 A [Dexcom Share](https://www.dexcom.com/) blood glucose readout for the
 [Omarchy](https://omarchy.org/) bar. Shows the current value and trend
-arrow, colored **purple** above your high threshold and **red** below your
+arrow, colored **orange** above your high threshold and **red** below your
 low threshold.
 
 ## Requirements
@@ -48,7 +48,7 @@ Then edit `~/.config/omarchy/dexcom.json`:
   `username` when `region` is `"us"`, so you likely don't have to think
   about this, but it's worth knowing if login still fails.
 - `region`: `"us"` for a US account, `"ous"` for outside-US.
-- `highThreshold` / `lowThreshold`: mg/dL cutoffs for purple/red.
+- `highThreshold` / `lowThreshold`: mg/dL cutoffs for orange/red.
 
 The widget picks up changes within a minute -- no restart needed. This file
 holds your password in plaintext, which is why the installer locks it to
@@ -56,7 +56,7 @@ holds your password in plaintext, which is why the installer locks it to
 
 ## Use
 
-The bar shows the value and a trend arrow, e.g. `118→`, `220↑` (purple),
+The bar shows the value and a trend arrow, e.g. `118→`, `220↑` (orange),
 `62↓` (red). It dims if a reading is more than 20 minutes stale (sensor or
 network issue). Left-click forces an immediate refresh; right-click sends a
 desktop notification with the full detail. The poll interval defaults to 60
@@ -113,7 +113,7 @@ you're done with it.
 
 `macos-xbar/dexcom-glucose.60s.py` is a self-contained port for
 [xbar](https://xbarapp.com/) (or [SwiftBar](https://swiftbar.app/)) --
-same Dexcom Share logic, same purple/red thresholds, same failure modes
+same Dexcom Share logic, same orange/red thresholds, same failure modes
 and fixes described above, just packaged as a single script instead of
 an Omarchy plugin since there's no Quickshell bar on macOS.
 
