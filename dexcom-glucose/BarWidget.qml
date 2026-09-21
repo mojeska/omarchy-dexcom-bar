@@ -80,14 +80,6 @@ BarWidget {
     }
   }
 
-  IpcHandler {
-    target: "dexcom-glucose"
-
-    function refresh(): void {
-      root.broadcast("refresh")
-    }
-  }
-
   Process {
     id: statusProc
     command: ["omarchy-dexcom-status"]

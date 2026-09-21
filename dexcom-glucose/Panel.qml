@@ -7,7 +7,16 @@ import qs.Ui
 Panel {
   id: root
   moduleName: "dexcom-glucose-settings"
-  ipcTarget: "dexcom-glucose.settings"
+  ipcTarget: "dexcom-glucose"
+  // manageIpc: false so this panel can own the single IpcHandler the target
+  // permits -- BarWidget.qml no longer declares its own. Two IpcHandlers on
+  // the same plugin under different target names doesn't work the way a
+  // split "widget owns refresh, panel owns open/close" setup implies: only
+  // one handler per target wins, and a mismatched second target (here,
+  // "dexcom-glucose.settings") never registers at all, silently, with no
+  // warning -- unlike every other Omarchy panel, which shares one target
+  // between widget and panel for exactly this reason (see network/monitor).
+  manageIpc: false
 
   property var anchorItem: null
   property var hostWidget: null
@@ -109,6 +118,19 @@ Panel {
         saveProc.stdinEnabled = false
       }
     }
+  }
+
+  IpcHandler {
+    target: root.ipcTarget
+
+    function refresh(): void {
+      if (root.hostWidget && typeof root.hostWidget.broadcast === "function") root.hostWidget.broadcast("refresh")
+    }
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.toggle() }
   }
 
   KeyboardPanel {
