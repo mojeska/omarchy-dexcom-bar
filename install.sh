@@ -19,7 +19,7 @@ case ":$PATH:" in
 esac
 
 mkdir -p "$PLUGIN_DIR"
-cp "$REPO_DIR/dexcom-glucose/manifest.json" "$REPO_DIR/dexcom-glucose/BarWidget.qml" "$PLUGIN_DIR/"
+cp "$REPO_DIR/dexcom-glucose/manifest.json" "$REPO_DIR/dexcom-glucose/BarWidget.qml" "$REPO_DIR/dexcom-glucose/Panel.qml" "$PLUGIN_DIR/"
 echo "Installed plugin to $PLUGIN_DIR"
 
 if [[ ! -f "$CONFIG_PATH" ]]; then
@@ -27,14 +27,13 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
   cat > "$CONFIG_PATH" <<'EOF'
 {
   "username": "",
-  "password": "",
   "region": "us",
   "highThreshold": 180,
   "lowThreshold": 70
 }
 EOF
   chmod 600 "$CONFIG_PATH"
-  echo "Created $CONFIG_PATH (permissions 600) -- edit it with your Dexcom Share credentials and thresholds."
+  echo "Created $CONFIG_PATH (permissions 600)."
 else
   echo "$CONFIG_PATH already exists, leaving it alone."
 fi
@@ -58,4 +57,4 @@ else
   echo "'omarchy' command not found -- enable the plugin manually once it's on an Omarchy system."
 fi
 
-echo "Done. Edit $CONFIG_PATH with your Dexcom Share account, then it'll show up in the bar within a minute."
+echo "Done. Left-click the widget in the bar to set up your Dexcom Share account -- your password is stored in the system keyring, not in $CONFIG_PATH."

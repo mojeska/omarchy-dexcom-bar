@@ -22,37 +22,37 @@ cd omarchy-dexcom-bar
 ```
 
 This installs `omarchy-dexcom-status` to `~/.local/bin`, installs the bar
-widget to `~/.config/omarchy/plugins/dexcom-glucose`, creates
+widget (including its settings panel) to
+`~/.config/omarchy/plugins/dexcom-glucose`, creates
 `~/.config/omarchy/dexcom.json` (permissions `600`) if it doesn't already
 exist, and enables the widget in the right section of your bar.
 
-Then edit `~/.config/omarchy/dexcom.json`:
+**Left-click the widget** to open its settings panel and enter:
 
-```json
-{
-  "username": "",
-  "password": "",
-  "region": "us",
-  "highThreshold": 180,
-  "lowThreshold": 70
-}
-```
-
-- `username` / `password`: your regular Dexcom account login (the one used
+- **Username / password**: your regular Dexcom account login (the one used
   in the Dexcom mobile app, for the account that's actually wearing the
   sensor -- not a follower account), not a separate API key. If you log in
   with a US phone number, it needs the country code (`+15551234567`, not
   `5551234567`) -- Dexcom Share rejects a bare 10-digit number with the same
   generic error as a wrong password, which makes it easy to chase the wrong
   problem. `omarchy-dexcom-status` auto-adds `+1` to a bare 10-digit
-  `username` when `region` is `"us"`, so you likely don't have to think
-  about this, but it's worth knowing if login still fails.
-- `region`: `"us"` for a US account, `"ous"` for outside-US.
-- `highThreshold` / `lowThreshold`: mg/dL cutoffs for orange/red.
+  username when region is US, so you likely don't have to think about this,
+  but it's worth knowing if login still fails. Leave the password field
+  blank to edit the other fields without changing it.
+- **Region**: US or outside-US.
+- **High / low thresholds**: mg/dL cutoffs for orange/red.
 
-The widget picks up changes within a minute -- no restart needed. This file
-holds your password in plaintext, which is why the installer locks it to
-`600` (readable only by you); don't loosen that.
+The password is stored in the system keyring (`secret-tool` / Secret
+Service -- served by `gnome-keyring`, a hard dependency of Omarchy itself,
+so this works out of the box on every install), never written to disk.
+`dexcom.json` only holds the username, region, and thresholds, still locked
+to `600`. **Middle-click the widget** any time afterward to reopen the
+settings panel and change any of this.
+
+If you're upgrading from a version where `dexcom.json` had a plaintext
+`password` field, nothing needs to be re-entered -- the next successful
+poll migrates it into the keyring and rewrites the file without it,
+automatically.
 
 ## Use
 
@@ -60,8 +60,10 @@ The bar shows the value and a trend arrow, e.g. `118→`, `220↑` (orange),
 `62↓` (red). A low reading also blinks the number in Morse SOS (··· --- ···)
 so it's hard to miss out of the corner of an eye. It dims if a reading is
 more than 20 minutes stale (sensor or network issue). Left-click forces an
-immediate refresh; right-click sends a desktop notification with the full
-detail. The poll interval defaults to 60 seconds and can be changed with:
+immediate refresh (or opens the settings panel if not configured yet);
+middle-click always opens the settings panel; right-click sends a desktop
+notification with the full detail. The poll interval defaults to 60 seconds
+and can be changed with:
 
 ```bash
 omarchy bar set dexcom-glucose refreshSeconds 120
@@ -71,10 +73,11 @@ omarchy bar set dexcom-glucose refreshSeconds 120
 
 Dexcom Share will lock an account out if it sees repeated failed logins in
 a short window, so `omarchy-dexcom-status` backs off after 3 consecutive
-authentication failures and stops calling the API until you actually edit
-`dexcom.json` again (it tracks the file's mtime). If the bar just shows
-"Dexcom" with no value, check the tooltip or run
-`omarchy-dexcom-status` directly in a terminal to see the specific error.
+authentication failures and stops calling the API until you save the
+settings panel again (it tracks `dexcom.json`'s mtime, which any save
+touches, even a password-only change). If the bar just shows "Dexcom" with
+no value, check the tooltip or run `omarchy-dexcom-status` directly in a
+terminal to see the specific error.
 
 Failure modes worth knowing about, all confirmed against a real account
 while building this:
@@ -107,8 +110,13 @@ while building this:
 ```
 
 Removes the plugin and the helper script. Your `~/.config/omarchy/dexcom.json`
-is left in place since it holds your credentials -- delete it yourself if
-you're done with it.
+and your Dexcom password in the system keyring are both left in place --
+remove them yourself if you're done with it:
+
+```bash
+rm ~/.config/omarchy/dexcom.json
+secret-tool clear service omarchy-dexcom-bar account dexcom-share
+```
 
 ## macOS (xbar)
 
@@ -135,7 +143,21 @@ Install:
    ```
 3. Click it in the menu bar → **Edit config…** to open
    `~/.config/dexcom-bar/dexcom.json` (created automatically on first run,
-   permissions `600`) and fill in the same fields described above.
+   permissions `600`) and fill in:
+   ```json
+   {
+     "username": "",
+     "password": "",
+     "region": "us",
+     "highThreshold": 180,
+     "lowThreshold": 70
+   }
+   ```
+   Same field meanings as the Omarchy version's settings panel (see
+   Install above) -- unlike there, this file does hold the password in
+   plaintext, since there's no in-app settings UI or keyring integration
+   for the macOS port (see the note above on why the SOS blink is also
+   skipped here; same reasoning -- not yet scoped as separate work).
 
 The `.60s.` in the filename is how xbar knows to refresh it every 60
 seconds -- rename the file (e.g. `.2m.`) to change that. Click **Refresh**

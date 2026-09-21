@@ -1,24 +1,37 @@
 #!/usr/bin/env python3
 """Fetch the latest Dexcom Share glucose reading and print it as JSON.
 
-Reads credentials and thresholds from ~/.config/omarchy/dexcom.json:
+Reads username/region/thresholds from ~/.config/omarchy/dexcom.json:
   {
     "username": "...",
-    "password": "...",
     "region": "us" | "ous",
     "highThreshold": 180,
     "lowThreshold": 70
   }
+
+The password is not stored in this file -- it lives in the system keyring
+(Secret Service, via `secret-tool`) instead. A config file left over from
+before this was the case (with a plaintext "password" key) is read once,
+migrated into the keyring, and rewritten without that key.
 
 Prints one JSON object to stdout, always exit 0 so the caller can just
 parse stdout rather than branch on exit code:
   {"ok": true, "mgdl": 118, "trend": "Flat", "trendArrow": "→",
    "level": "normal", "minutesAgo": 3}
   {"ok": false, "error": "not configured"}
+
+Two extra CLI modes support the bar widget's setup panel:
+  --get-config   Print {username, region, highThreshold, lowThreshold,
+                 hasPassword} -- never the password itself.
+  --set-config   Read one JSON object from stdin (same shape, plus an
+                 optional "password") and persist it -- non-secret fields
+                 to dexcom.json, password (if sent) to the keyring. Prints
+                 {"ok": true} or {"ok": false, "error": "..."}.
 """
 
 import json
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -27,6 +40,11 @@ from pathlib import Path
 
 CONFIG_PATH = Path.home() / ".config" / "omarchy" / "dexcom.json"
 STATE_PATH = Path.home() / ".local" / "state" / "omarchy" / "dexcom-status.json"
+
+# Fixed Secret Service attributes for the stored password -- not tied to the
+# username, so changing the username later doesn't orphan the stored secret.
+SECRET_SERVICE = "omarchy-dexcom-bar"
+SECRET_ACCOUNT = "dexcom-share"
 
 # Dexcom Share error codes that mean the credentials themselves are wrong,
 # as opposed to a transient network/server problem. Repeatedly retrying
@@ -81,6 +99,34 @@ def normalize_username(username, region):
     if region == "us" and re.fullmatch(r"\d{10}", stripped):
         return "+1" + stripped
     return username
+
+
+def keyring_get_password():
+    try:
+        result = subprocess.run(
+            ["secret-tool", "lookup", "service", SECRET_SERVICE, "account", SECRET_ACCOUNT],
+            capture_output=True, text=True, timeout=TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    password = result.stdout.rstrip("\n")
+    return password if password else None
+
+
+def keyring_set_password(password):
+    try:
+        result = subprocess.run(
+            [
+                "secret-tool", "store", "--label=Dexcom Share (omarchy-dexcom-bar)",
+                "service", SECRET_SERVICE, "account", SECRET_ACCOUNT,
+            ],
+            input=password, capture_output=True, text=True, timeout=TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
 
 
 def load_config():
@@ -141,7 +187,25 @@ def dexcom_error_code(http_error):
 
 def main():
     config = load_config()
-    if not config or not config.get("username") or not config.get("password"):
+    if not config or not config.get("username"):
+        emit({"ok": False, "error": "not configured"})
+
+    password = config.get("password")
+    if password:
+        # Config left over from before the password moved to the keyring --
+        # use it for this run, and migrate it out of the file so it doesn't
+        # keep sitting there in plaintext.
+        if keyring_set_password(password):
+            try:
+                migrated = {k: v for k, v in config.items() if k != "password"}
+                CONFIG_PATH.write_text(json.dumps(migrated, indent=2) + "\n", encoding="utf-8")
+                CONFIG_PATH.chmod(0o600)
+            except OSError:
+                pass
+    else:
+        password = keyring_get_password()
+
+    if not password:
         emit({"ok": False, "error": "not configured"})
 
     config_mtime = CONFIG_PATH.stat().st_mtime
@@ -153,7 +217,7 @@ def main():
     if state.get("consecutiveAuthFailures", 0) >= MAX_CONSECUTIVE_AUTH_FAILURES:
         emit({
             "ok": False,
-            "error": "login rejected repeatedly -- fix ~/.config/omarchy/dexcom.json to retry",
+            "error": "login rejected repeatedly -- update your Dexcom credentials in the widget to retry",
         })
 
     region = str(config.get("region", "us")).lower()
@@ -177,7 +241,7 @@ def main():
             base_url + "/General/AuthenticatePublisherAccount",
             {
                 "accountName": config["username"],
-                "password": config["password"],
+                "password": password,
                 "applicationId": APPLICATION_ID,
             },
         )
@@ -199,7 +263,7 @@ def main():
             base_url + "/General/LoginPublisherAccountById",
             {
                 "accountId": account_id,
-                "password": config["password"],
+                "password": password,
                 "applicationId": APPLICATION_ID,
             },
         )
@@ -253,5 +317,66 @@ def main():
     })
 
 
+def cmd_get_config():
+    config = load_config() or {}
+    password = config.get("password") or keyring_get_password()
+    emit({
+        "username": config.get("username", ""),
+        "region": str(config.get("region", "us")).lower(),
+        "highThreshold": config.get("highThreshold", 180),
+        "lowThreshold": config.get("lowThreshold", 70),
+        "hasPassword": bool(password),
+    })
+
+
+def cmd_set_config():
+    try:
+        payload = json.loads(sys.stdin.read())
+    except json.JSONDecodeError:
+        emit({"ok": False, "error": "bad request (invalid JSON)"})
+
+    if not isinstance(payload, dict):
+        emit({"ok": False, "error": "bad request (expected an object)"})
+
+    username = str(payload.get("username", "")).strip()
+    if not username:
+        emit({"ok": False, "error": "username is required"})
+
+    region = str(payload.get("region", "us")).lower()
+    if region not in BASE_URLS:
+        region = "us"
+
+    try:
+        high = int(payload.get("highThreshold", 180))
+        low = int(payload.get("lowThreshold", 70))
+    except (TypeError, ValueError):
+        emit({"ok": False, "error": "thresholds must be numbers"})
+
+    password = payload.get("password")
+    if password:
+        if not keyring_set_password(str(password)):
+            emit({"ok": False, "error": "couldn't save password to the system keyring"})
+
+    config = {
+        "username": username,
+        "region": region,
+        "highThreshold": high,
+        "lowThreshold": low,
+    }
+    try:
+        CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONFIG_PATH.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+        CONFIG_PATH.chmod(0o600)
+    except OSError as e:
+        emit({"ok": False, "error": "couldn't write config: " + str(e)})
+
+    emit({"ok": True})
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--get-config":
+        cmd_get_config()
+    elif len(sys.argv) > 1 and sys.argv[1] == "--set-config":
+        cmd_set_config()
+    else:
+        main()
