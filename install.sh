@@ -41,8 +41,16 @@ fi
 
 if command -v omarchy >/dev/null 2>&1; then
   if omarchy plugin validate "$PLUGIN_DIR" >/dev/null 2>&1; then
-    omarchy plugin enable "$PLUGIN_ID" --section right >/dev/null 2>&1 \
-      && echo "Enabled $PLUGIN_ID in the bar (right section)."
+    # The running shell won't know about a just-copied plugin id until it
+    # rescans its plugins directory -- without this, enable fails with
+    # "unknown plugin" even though the files are in place.
+    omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+    if enable_output=$(omarchy plugin enable "$PLUGIN_ID" --section right 2>&1); then
+      echo "Enabled $PLUGIN_ID in the bar (right section)."
+    else
+      echo "Warning: couldn't enable $PLUGIN_ID automatically: $enable_output"
+      echo "Run this yourself: omarchy plugin enable $PLUGIN_ID --section right"
+    fi
   else
     echo "Warning: plugin failed validation -- run 'omarchy plugin validate $PLUGIN_DIR' to see why."
   fi
