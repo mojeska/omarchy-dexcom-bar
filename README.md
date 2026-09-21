@@ -5,6 +5,11 @@ A [Dexcom Share](https://www.dexcom.com/) blood glucose readout for the
 arrow, colored **orange** above your high threshold and **red** below your
 low threshold.
 
+This only works with a **Dexcom** continuous glucose monitor (CGM) and its
+Dexcom Share service -- it has no support for other CGM brands. It is an
+independent, unofficial project, not an application provided by, affiliated
+with, or endorsed by Dexcom, Inc.
+
 ## Requirements
 
 - Omarchy (the Quickshell-based bar and its plugin system)
