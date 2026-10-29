@@ -58,7 +58,10 @@ TREND_ARROWS = {
 # Dexcom Share error codes that mean the credentials themselves are wrong,
 # as opposed to a transient network/server problem. Repeatedly retrying
 # these looks like a brute-force attempt from Dexcom's side, so after a few
-# in a row we stop hitting the API until the config file is actually edited.
+# in a row we pause. Dexcom sometimes returns these codes during its own
+# outages even when the password is right, so the pause isn't permanent:
+# after AUTH_RETRY_SECONDS we try one login, and a failure pauses again.
+# Editing the config file also clears the pause straight away.
 AUTH_ERROR_CODES = {
     "AccountPasswordInvalid",
     "AccountPasswordInvalidLegacy",
@@ -69,6 +72,7 @@ AUTH_ERROR_CODES = {
     "InvalidArgument",
 }
 MAX_CONSECUTIVE_AUTH_FAILURES = 3
+AUTH_RETRY_SECONDS = 60 * 60
 TIMEOUT = 8
 
 
@@ -156,7 +160,16 @@ def fetch_reading():
         save_state(state)
 
     if state.get("consecutiveAuthFailures", 0) >= MAX_CONSECUTIVE_AUTH_FAILURES:
-        return {"ok": False, "error": "login rejected repeatedly -- edit dexcom.json to retry"}
+        # Older state files have no timestamp; treat them as due for a retry.
+        waited = time.time() - float(state.get("lastAuthFailureAt") or 0)
+        if waited < AUTH_RETRY_SECONDS:
+            minutes_left = max(1, int((AUTH_RETRY_SECONDS - waited) / 60) + 1)
+            last = state.get("lastAuthError")
+            return {
+                "ok": False,
+                "error": "login rejected repeatedly" + (" (" + last + ")" if last else "")
+                + " -- retrying in " + str(minutes_left) + " min, or edit dexcom.json",
+            }
 
     region = str(config.get("region", "us")).lower()
     base_url = BASE_URLS.get(region, BASE_URLS["us"])
@@ -166,6 +179,8 @@ def fetch_reading():
     def auth_failure(reason):
         state["consecutiveAuthFailures"] = state.get("consecutiveAuthFailures", 0) + 1
         state["configMtime"] = config_mtime
+        state["lastAuthFailureAt"] = time.time()
+        state["lastAuthError"] = reason
         save_state(state)
         return {"ok": False, "error": "login failed: " + reason}
 
