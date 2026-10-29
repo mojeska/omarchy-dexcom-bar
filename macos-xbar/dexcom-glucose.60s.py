@@ -3,7 +3,7 @@
 # <xbar.version>1.0</xbar.version>
 # <xbar.author>omarchy-dexcom-bar contributors</xbar.author>
 # <xbar.author.github>mojeska</xbar.author.github>
-# <xbar.desc>Shows current Dexcom Share blood glucose in the menu bar, colored orange above a high threshold and red below a low threshold.</xbar.desc>
+# <xbar.desc>Shows current Dexcom Share blood glucose in the menu bar, colored purple above a high threshold and red below a low threshold.</xbar.desc>
 # <xbar.dependencies>python3</xbar.dependencies>
 #
 # macOS port of the Omarchy dexcom-glucose bar widget, for xbar
@@ -283,7 +283,7 @@ def render(result):
 
     mgdl = result["mgdl"]
     level = result["level"]
-    color = "orange" if level == "high" else "red" if level == "low" else ""
+    color = "purple" if level == "high" else "red" if level == "low" else ""
     stale = result["minutesAgo"] is not None and result["minutesAgo"] > 20
 
     label = str(round(mgdl)) + result["trendArrow"]
